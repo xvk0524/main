@@ -1,0 +1,168 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local WorkspaceService = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local ProcessRemote = ReplicatedStorage:WaitForChild("ACS_Engine"):WaitForChild("Events"):WaitForChild("Process")
+local GameSystem = ReplicatedStorage:WaitForChild("GameSystem")
+
+local SilentAimEnabled = true
+local HeadChance = 10
+local HitChance = 100
+local FOVRadius = 180
+local NonHeadParts = {"UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg"}
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.NumSides = 64
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.8
+FOVCircle.Color = Color3.fromRGB(240, 60, 60)
+FOVCircle.Radius = FOVRadius
+FOVCircle.Visible = true
+
+local TargetDot = Drawing.new("Circle")
+TargetDot.Thickness = 1
+TargetDot.NumSides = 16
+TargetDot.Filled = true
+TargetDot.Radius = 4
+TargetDot.Color = Color3.fromRGB(240, 60, 60)
+TargetDot.Visible = false
+
+local function IsEnemy(TargetPlayer)
+    if TargetPlayer == LocalPlayer then
+        return false
+    end
+    if GameSystem:GetAttribute("FreeForAll") then
+        return true
+    end
+    if LocalPlayer.Team and TargetPlayer.Team then
+        return LocalPlayer.Team ~= TargetPlayer.Team
+    end
+    return true
+end
+
+local function GetAllTargets()
+    local Targets = {}
+    for _, Player in Players:GetPlayers() do
+        if IsEnemy(Player) then
+            local Character = Player.Character
+            if Character then
+                local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                if Humanoid and Humanoid.Health > 0 then
+                    if Character:FindFirstChild("Head") then
+                        table.insert(Targets, Character)
+                    end
+                end
+            end
+        end
+    end
+    return Targets
+end
+
+local function GetTargetPart(Character)
+    if math.random(1, 100) <= HeadChance then
+        local Head = Character:FindFirstChild("Head")
+        if Head then
+            return Head
+        end
+    end
+    local Shuffled = table.clone(NonHeadParts)
+    for I = #Shuffled, 2, -1 do
+        local J = math.random(1, I)
+        Shuffled[I], Shuffled[J] = Shuffled[J], Shuffled[I]
+    end
+    for _, Name in Shuffled do
+        local Part = Character:FindFirstChild(Name)
+        if Part then
+            return Part
+        end
+    end
+    return Character:FindFirstChild("Head")
+end
+
+local function GetNearestTarget()
+    local Camera = WorkspaceService.CurrentCamera
+    if not Camera then
+        return nil, nil
+    end
+    local ViewportSize = Camera.ViewportSize
+    local ScreenCenter = Vector2.new(ViewportSize.X / 2, ViewportSize.Y / 2)
+    local BestDistance = math.huge
+    local BestPart = nil
+    local BestModel = nil
+
+    for _, TargetModel in GetAllTargets() do
+        local Head = TargetModel:FindFirstChild("Head")
+        if Head then
+            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Head.Position)
+            if OnScreen then
+                local ScreenDist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - ScreenCenter).Magnitude
+                if ScreenDist < FOVRadius and ScreenDist < BestDistance then
+                    BestDistance = ScreenDist
+                    BestModel = TargetModel
+                    BestPart = GetTargetPart(TargetModel)
+                end
+            end
+        end
+    end
+
+    return BestModel, BestPart
+end
+
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(Self, ...)
+    local Method = getnamecallmethod()
+
+    if SilentAimEnabled and Method == "FireServer" and Self == ProcessRemote and math.random(1, 100) <= HitChance then
+        local Tool, RayResult, ShotID = ...
+        if typeof(RayResult) == "table" then
+            local TargetModel, TargetPart = GetNearestTarget()
+            if TargetModel and TargetPart then
+                local Humanoid = TargetModel:FindFirstChildOfClass("Humanoid")
+                if Humanoid and Humanoid.Health > 0 then
+                    local NewRayResult = {
+                        ["Instance"] = TargetPart,
+                        ["Position"] = TargetPart.Position,
+                        ["Material"] = Enum.Material.Plastic,
+                        ["Normal"] = Vector3.new(0, 1, 0),
+                        ["Distance"] = RayResult.Distance or 10
+                    }
+                    setnamecallmethod(Method)
+                    return OldNamecall(Self, Tool, NewRayResult, ShotID)
+                end
+            end
+        end
+    end
+
+    setnamecallmethod(Method)
+    return OldNamecall(Self, ...)
+end))
+
+RunService.RenderStepped:Connect(function()
+    local Camera = WorkspaceService.CurrentCamera
+    if not Camera then
+        FOVCircle.Visible = false
+        TargetDot.Visible = false
+        return
+    end
+    local ViewportSize = Camera.ViewportSize
+    local ScreenCenter = Vector2.new(ViewportSize.X / 2, ViewportSize.Y / 2)
+    FOVCircle.Position = ScreenCenter
+    FOVCircle.Radius = FOVRadius
+    FOVCircle.Visible = SilentAimEnabled
+    if not SilentAimEnabled then
+        TargetDot.Visible = false
+        return
+    end
+    local _, Part = GetNearestTarget()
+    if Part then
+        local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+        if OnScreen then
+            TargetDot.Position = Vector2.new(ScreenPos.X, ScreenPos.Y)
+            TargetDot.Visible = true
+            return
+        end
+    end
+    TargetDot.Visible = false
+end)
