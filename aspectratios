@@ -1,0 +1,16 @@
+local aspect_ratio = {
+    enabled = true,
+    horizontal_stretch = 100,
+    vertical_stretch = 50
+}
+local Camera = game:GetService("Workspace").CurrentCamera;
+
+game:GetService("RunService").RenderStepped:Connect(function()
+if aspect_ratio.enabled then
+    local currentCFrame = Camera.CFrame
+    if currentCFrame ~= originalCameraCFrame then
+        local X, Y, Z, R00, R01, R02, R10, R11, R12, R20, R21, R22 = currentCFrame:GetComponents()
+        Camera.CFrame = CFrame.new(X, Y, Z, R00 * aspect_ratio.horizontal_stretch / 100, R01 * aspect_ratio.vertical_stretch / 100, R02, R10, R11 * aspect_ratio.vertical_stretch / 100, R12, R20 * aspect_ratio.horizontal_stretch / 100, R21 * aspect_ratio.vertical_stretch / 100, R22)
+    end
+end
+end)
