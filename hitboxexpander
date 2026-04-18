@@ -1,0 +1,129 @@
+local Players = cloneref(game:GetService('Players'))
+local RS = cloneref(game:GetService('RunService'))
+local Client = Players.LocalPlayer
+
+local size = 30
+
+local ScreenGui = Instance.new('ScreenGui')
+ScreenGui.Name = 'HitboxExpanderUI'
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = Client:WaitForChild('PlayerGui')
+
+local MainFrame = Instance.new('Frame')
+MainFrame.Size = UDim2.new(0, 250, 0, 120)
+MainFrame.Position = UDim2.new(0.5, -125, 0.05, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new('UICorner')
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+local Title = Instance.new('TextLabel')
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = 'Hitbox Expander'
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.Parent = MainFrame
+
+local SizeLabel = Instance.new('TextLabel')
+SizeLabel.Size = UDim2.new(1, -20, 0, 20)
+SizeLabel.Position = UDim2.new(0, 10, 0, 40)
+SizeLabel.BackgroundTransparency = 1
+SizeLabel.Text = 'Size: ' .. size
+SizeLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+SizeLabel.Font = Enum.Font.Gotham
+SizeLabel.TextSize = 14
+SizeLabel.TextXAlignment = Enum.TextXAlignment.Left
+SizeLabel.Parent = MainFrame
+
+local SliderFrame = Instance.new('Frame')
+SliderFrame.Size = UDim2.new(1, -20, 0, 30)
+SliderFrame.Position = UDim2.new(0, 10, 0, 70)
+SliderFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SliderFrame.BorderSizePixel = 0
+SliderFrame.Parent = MainFrame
+
+local SliderCorner = Instance.new('UICorner')
+SliderCorner.CornerRadius = UDim.new(0, 6)
+SliderCorner.Parent = SliderFrame
+
+local SliderButton = Instance.new('TextButton')
+SliderButton.Size = UDim2.new(0, 40, 1, 0)
+SliderButton.Position = UDim2.new((size - 5) / 95, -20, 0, 0)
+SliderButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+SliderButton.BorderSizePixel = 0
+SliderButton.Text = ''
+SliderButton.Parent = SliderFrame
+
+local ButtonCorner = Instance.new('UICorner')
+ButtonCorner.CornerRadius = UDim.new(0, 6)
+ButtonCorner.Parent = SliderButton
+
+local dragging = false
+SliderButton.MouseButton1Down:Connect(function()
+    dragging = true
+end)
+
+game:GetService('UserInputService').InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+RS.RenderStepped:Connect(function()
+    if dragging then
+        local mouse = Client:GetMouse()
+        local relativeX = math.clamp(
+            mouse.X - SliderFrame.AbsolutePosition.X,
+            0,
+            SliderFrame.AbsoluteSize.X
+        )
+        local percentage = relativeX / SliderFrame.AbsoluteSize.X
+        size = math.floor(5 + (percentage * 95)) -- Range from 5 to 100
+        SliderButton.Position = UDim2.new(percentage, -20, 0, 0)
+        SizeLabel.Text = 'Size: ' .. size
+    end
+end)
+
+RS.RenderStepped:Connect(function()
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player == Client then
+            continue
+        end
+
+        if
+            Player.Character
+            and Player.Character:FindFirstChild('HumanoidRootPart')
+        then
+            local HRP = Player.Character.HumanoidRootPart
+            local Humanoid = Player.Character:FindFirstChild('Humanoid')
+
+            if Humanoid and Humanoid.Health > 0 then
+                HRP.Size = Vector3.new(size, size, size)
+                HRP.Transparency = 0.5
+                HRP.CanCollide = false
+                HRP.Color = Color3.fromRGB(255, 0, 0)
+
+                if not HRP:FindFirstChild('SelectionBox') then
+                    local outline = Instance.new('SelectionBox')
+                    outline.Name = 'SelectionBox'
+                    outline.Parent = HRP
+                    outline.Adornee = HRP
+                    outline.LineThickness = 0.05
+                    outline.Color3 = Color3.fromRGB(0, 0, 0)
+                end
+            else
+                HRP.Size = Vector3.new(2, 2, 1)
+                HRP.Transparency = 1
+                local outline = HRP:FindFirstChild('SelectionBox')
+                if outline then
+                    outline:Destroy()
+                end
+            end
+        end
+    end
+end)
